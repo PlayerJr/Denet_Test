@@ -1,0 +1,38 @@
+// ── Grafana Alloy Configuration ───────────────────────────────────────
+// Collects Docker container logs and forwards them to Loki.
+
+// Discover Docker containers on the local host and tail their logs.
+loki.source.docker "containers" {
+  host        = "unix:///var/run/docker.sock"
+  targets     = discovery.docker.containers.targets
+  forward_to  = [loki.write.loki_endpoint.receiver]
+
+  // Add a static label identifying the log source
+  labels = {
+    source = "docker",
+  }
+}
+
+// Auto-discover Docker containers.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Forward all collected logs to the Loki instance running in the compose
+// stack.
+loki.write "loki_endpoint" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+
+    // Basic retry configuration
+    retry {
+      enabled = true
+      min_period = "1s"
+      max_period = "30s"
+      max_retries = 5
+    }
+
+    // Timeout for each push request
+    remote_timeout = "10s"
+  }
+}

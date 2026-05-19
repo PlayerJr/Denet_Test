@@ -1,0 +1,129 @@
+# ── Task Management API — Docker Compose ──────────────────────────────
+# Full stack: application + PostgreSQL + Redis + Loki + Alloy + Grafana.
+
+services:
+
+  # ── Application ──────────────────────────────────────────────────────
+  app:
+    image: ${CI_REGISTRY_IMAGE:-task-manager}/app:${IMAGE_TAG:-latest}
+    build:
+      context: .
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "app"
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-tasksdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "postgres"
+
+  # ── Redis ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_PORT:-6379}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "redis"
+
+  # ── Loki ─────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.4
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - lokidata:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "loki"
+
+  # ── Grafana Alloy ────────────────────────────────────────────────────
+  alloy:
+    image: grafana/alloy:v1.7
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "alloy"
+
+  # ── Grafana ──────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.5
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./config/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    environment:
+      GF_INSTALL_PLUGINS: ""
+    depends_on:
+      - loki
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "grafana"
+
+volumes:
+  pgdata:
+  redisdata:
+  lokidata:
+  grafanadata:
