@@ -1,5 +1,3 @@
-# ── Docker ignore ──────────────────────────────────────────────────────
-# Do not send these files to the Docker daemon during image builds.
 __pycache__/
 *.pyc
 .env
