@@ -1,9 +1,9 @@
-# ── Task Management API — Docker Compose ──────────────────────────────
-# Full stack: application + PostgreSQL + Redis + Loki + Alloy + Grafana.
+# Docker Compose for Task Management API
+# Spins up the app, PostgreSQL, Redis, Loki, Alloy, and Grafana.
 
 services:
 
-  # ── Application ──────────────────────────────────────────────────────
+  # --- Application ---
   app:
     image: ${CI_REGISTRY_IMAGE:-task-manager}/app:${IMAGE_TAG:-latest}
     build:
@@ -24,9 +24,9 @@ services:
         max-file: "3"
         tag: "app"
 
-  # ── PostgreSQL ───────────────────────────────────────────────────────
+  # --- PostgreSQL ---
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -46,18 +46,13 @@ services:
         max-file: "3"
         tag: "postgres"
 
-  # ── Redis ────────────────────────────────────────────────────────────
+  # --- Redis ---
   redis:
     image: redis:7-alpine
     volumes:
       - redisdata:/data
     ports:
       - "${REDIS_PORT:-6379}"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -66,7 +61,7 @@ services:
         max-file: "3"
         tag: "redis"
 
-  # ── Loki ─────────────────────────────────────────────────────────────
+  # --- Loki ---
   loki:
     image: grafana/loki:3.4
     ports:
@@ -83,7 +78,7 @@ services:
         max-file: "3"
         tag: "loki"
 
-  # ── Grafana Alloy ────────────────────────────────────────────────────
+  # --- Grafana Alloy ---
   alloy:
     image: grafana/alloy:v1.7
     ports:
@@ -102,7 +97,7 @@ services:
         max-file: "3"
         tag: "alloy"
 
-  # ── Grafana ──────────────────────────────────────────────────────────
+  # --- Grafana ---
   grafana:
     image: grafana/grafana:11.5
     ports:

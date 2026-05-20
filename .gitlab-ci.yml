@@ -1,19 +1,12 @@
-# ── Task Management API — GitLab CI Pipeline ──────────────────────────
-# Stages: test → build → publish → deploy
-# Triggers on every push to any branch.
-
 variables:
-  # ── Image naming ────────────────────────────────────────────────────
   IMAGE_NAME:         $CI_REGISTRY_IMAGE/app
   IMAGE_TAG:          $CI_COMMIT_SHORT_SHA
   IMAGE_TAG_LATEST:   latest
 
-  # ── Docker-in-Docker ────────────────────────────────────────────────
   DOCKER_HOST:        tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
   DOCKER_DRIVER:      overlay2
 
-  # ── Deployment ──────────────────────────────────────────────────────
   DEPLOY_DIR:         /opt/task-manager
   COMPOSE_PROJECT_NAME: task-manager
 
@@ -23,14 +16,11 @@ stages:
   - publish
   - deploy
 
-# ═══════════════════════════════════════════════════════════════════════
-# Test
-# ═══════════════════════════════════════════════════════════════════════
-
 test:
   stage: test
   image: python:3.12-slim
   before_script:
+    - pip install --upgrade pip
     - pip install --no-cache-dir -r requirements.txt aiosqlite
   script:
     - pytest --junitxml=report.xml
@@ -43,10 +33,6 @@ test:
     paths:
       - .cache/pip
 
-# ═══════════════════════════════════════════════════════════════════════
-# Build
-# ═══════════════════════════════════════════════════════════════════════
-
 build:
   stage: build
   image: docker:27
@@ -56,14 +42,6 @@ build:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:$IMAGE_TAG_LATEST .
-  artifacts:
-    paths:
-      - .gitlab-ci.yml
-    expire_in: 1 hour
-
-# ═══════════════════════════════════════════════════════════════════════
-# Publish
-# ═══════════════════════════════════════════════════════════════════════
 
 publish:
   stage: publish
@@ -78,10 +56,6 @@ publish:
   needs:
     - build
 
-# ═══════════════════════════════════════════════════════════════════════
-# Deploy
-# ═══════════════════════════════════════════════════════════════════════
-
 deploy:
   stage: deploy
   image: alpine:3.20
@@ -92,20 +66,18 @@ deploy:
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
   script:
-    # Copy compose file and env to the server
-    - scp docker-compose.yml .env $SSH_USER@$SSH_HOST:$DEPLOY_DIR/
-    - scp -r config/ $SSH_USER@$SSH_HOST:$DEPLOY_DIR/
-
-    # Pull new image and restart
-    - ssh $SSH_USER@$SSH_HOST "
+    - echo "Deploying to $DEPLOY_HOST..."
+    - scp docker-compose.yml .env $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/
+    - scp -r config/ $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "
         cd $DEPLOY_DIR &&
         docker compose pull &&
         docker compose up -d --remove-orphans
       "
   environment:
     name: production
-    url: http://$SSH_HOST:8000
+    url: http://$DEPLOY_HOST:8000
   needs:
     - publish
   only:
-    - Denet_Test
+    - main

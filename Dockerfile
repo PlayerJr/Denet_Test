@@ -1,35 +1,29 @@
-# syntax=docker/dockerfile:1
-# ── Task Management API — Dockerfile ──────────────────────────────────
-# Multi-stage build: separate build deps from runtime for a small,
-# secure production image.
+FROM python:3.11.6-slim AS builder
 
-# ── Stage 1: Builder ──────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /build
-COPY requirements.txt .
+
+COPY . .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM python:3.11.6-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_PORT=8000
 
-RUN groupadd --system app && useradd --system --no-log-init --gid app app
+# non-root user for security
+RUN groupadd --system appuser && useradd --system --no-log-init --gid appuser appuser
 
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
 COPY app/ app/
+RUN chown -R appuser:appuser /app
 
-RUN chown -R app:app /app
-
-USER app
+USER appuser
 
 EXPOSE 8000
 
